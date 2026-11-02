@@ -19,8 +19,40 @@ function initTraction(){shell('Ensayo de tracción','Determina cómo responde un
 $('#material').value='steel';$('#area').readOnly=true;
 const upd=()=>{$('#area').value=fmt(Math.PI*Number($('#diameter').value)**2/4,2)};$('#diameter').addEventListener('input',upd);
 $('#run').onclick=runTraction;$('#reset').onclick=initTraction}
-function stressCurve(mat,maxStress){const fy=mat.fy,fu=mat.fu,epsY=fy/mat.E,epsU=Math.max(epsY*2,mat.duct/100),end=Math.max(epsU*1.08,epsY*3);let pts=[];for(let i=0;i<=100;i++){let e=end*i/100,s;if(e<=epsY)s=mat.E*e;else if(e<=epsU)s=fy+(fu-fy)*(e-epsY)/(epsU-epsY);else s=fu*(1-.75*(e-epsU)/(end-epsU));s=Math.max(0,s);pts.push({x:e*100,y:s})}return pts}
-function runTraction(){let m=materials[$('#material').value],d=+$('#diameter').value,L=+$('#length').value,F=+$('#force').value;if(!(d>0&&L>0&&F>=0)){alert('Introduce diámetro y longitud positivos, y una fuerza no negativa.');return}let A=Math.PI*d*d/4,stress=F*1000/A,eps=stress/m.E*100,fracture=stress>=m.fu,yield=stress>=m.fy;let ext=eps/100*L;$('#status').textContent=fracture?'● ROTURA':'● ENSAYO COMPLETADO';$('#specimen').setAttribute('d',fracture?'M300 125H320V147L316 153 324 160 312 172H300Z':'M300 125H320V172H300Z');$('#specimen').classList.toggle('fracture',fracture);const data=stressCurve(m,stress).filter(p=>p.x<=eps);if(!data.length||data[data.length-1].x<eps)data.push({x:eps,y:stress});showMetrics([['TENSIÓN MÁXIMA',fmt(stress,1),'MPa'],['ALARGAMIENTO ESTIMADO',fmt(ext,2),'mm'],['ÁREA INICIAL',fmt(A,2),'mm²']]);drawChart('Esfuerzo (MPa)','Deformación (%)',[{label:'Curva estimada del material',data,parsing:false,borderColor:'#1d6686',backgroundColor:'#1d6686',borderWidth:2,pointRadius:0,tension:.18},{label:'Estado alcanzado',data:[{x:eps,y:stress}],showLine:false,pointRadius:6,pointBackgroundColor:'#f28c28'}]);$('#result-content').insertAdjacentHTML('beforeend',`<div class="explanation">${fracture?'La tensión aplicada supera la resistencia estimada del material: la probeta se considera rota en este modelo.':yield?'La tensión supera el límite elástico: queda deformación permanente. No necesariamente se ha producido la rotura.':'La probeta permanece en el comportamiento elástico aproximado: al retirar la carga recuperaría su longitud, dentro del modelo.'} ${m.duct<2?'La baja ductilidad representada corresponde a un comportamiento frágil.':'El material presenta capacidad de deformación plástica antes de la rotura.'}</div>`)}
+function stressCurve(mat){
+  const fy=mat.fy, fu=mat.fu, epsY=fy/mat.E, epsU=Math.max(epsY*2,mat.duct/100), end=Math.max(epsU*1.08,epsY*3);
+  const pts=[];
+  for(let i=0;i<=120;i++){
+    const e=end*i/120;
+    let stress;
+    if(e<=epsY) stress=mat.E*e;
+    else if(e<=epsU) stress=fy+(fu-fy)*(e-epsY)/(epsU-epsY);
+    else stress=fu*(1-.75*(e-epsU)/(end-epsU));
+    pts.push({x:e*100,y:Math.max(0,stress)});
+  }
+  return pts;
+}
+function runTraction(){
+  const m=materials[$('#material').value], d=+$('#diameter').value, L=+$('#length').value, F=+$('#force').value;
+  if(!(d>0&&L>0&&F>=0)){alert('Introduce diámetro y longitud positivos, y una fuerza no negativa.');return}
+  const A=Math.PI*d*d/4, stress=F*1000/A, strain=stress/m.E, eps=strain*100;
+  const yieldStress=m.fy, fracture=stress>=m.fu, yield=stress>=yieldStress;
+  const ext=strain*L;
+  $('#status').textContent=fracture?'● ROTURA':yield?'● DEFORMACIÓN PLÁSTICA':'● ZONA ELÁSTICA';
+  const specimen=$('#specimen');
+  specimen.classList.toggle('fracture',fracture);
+  specimen.setAttribute('d',fracture?'M300 125H320V147L316 153 324 160 312 172H300Z':yield?'M300 125H320V145L323 172H297L300 145Z':'M300 125H320V172H300Z');
+  const curve=stressCurve(m);
+  const data=curve.filter(p=>p.x<=eps);
+  if(!data.length||data[data.length-1].x<eps)data.push({x:eps,y:stress});
+  showMetrics([['TENSIÓN APLICADA',fmt(stress,1),'MPa'],['ALARGAMIENTO ESTIMADO',fmt(ext,2),'mm'],['SECCIÓN INICIAL',fmt(A,2),'mm²']]);
+  drawChart('Deformación (%)','Esfuerzo (MPa)',[
+    {label:'Curva esfuerzo-deformación estimada',data:curve,parsing:false,borderColor:'#dce3e7',borderWidth:2,pointRadius:0},
+    {label:'Trayectoria hasta la carga aplicada',data,parsing:false,borderColor:'#1d6686',backgroundColor:'#1d6686',borderWidth:3,pointRadius:0},
+    {label:'Estado actual',data:[{x:eps,y:stress}],showLine:false,pointRadius:6,pointBackgroundColor:'#f28c28'}
+  ]);
+  $('#result-content').insertAdjacentHTML('beforeend',`<div class="explanation">${fracture?'La tensión aplicada supera la resistencia máxima estimada: el modelo considera que la probeta se rompe.':yield?'Se supera el límite elástico estimado. La probeta entra en deformación plástica y puede conservar un alargamiento al retirar la carga.':'La tensión está por debajo del límite elástico estimado. En este modelo, la deformación es principalmente elástica y la probeta recuperaría su longitud al descargarla.'} ${m.duct<2?'La fundición gris se representa como un material de comportamiento frágil.':'La curva representa una zona plástica simplificada antes de la rotura.'} La curva es esquemática y no corresponde a un ensayo experimental certificado.</div>`);
+}
 function initBrinell(){shell('Ensayo de dureza Brinell','Una bola presiona la superficie. La huella permite estimar la resistencia a la penetración.','UNE-EN ISO 6506',materialField()+field('Diámetro de bola (D)','ball',10,'mm','0.5',1,10)+field('Carga aplicada (F)','load',3000,'kgf','100',100,30000)+field('Diámetro de huella (d)','dentdiam',4,'mm','0.1',0.1,9.9),specimenSVG('brinell'),'La bola penetra en la superficie durante un tiempo de aplicación de carga. Cuanto menor sea la huella para unas mismas condiciones, mayor será la dureza.'));
 $('#material').value='steel';$('#run').onclick=runBrinell;$('#reset').onclick=initBrinell}
 function runBrinell(){let m=materials[$('#material').value],D=+$('#ball').value,F=+$('#load').value,d=+$('#dentdiam').value;if(!(D>0&&F>0&&d>0&&d<D)){alert('Introduce valores positivos y una huella menor que el diámetro de la bola.');return}let den=Math.PI*D*(D-Math.sqrt(D*D-d*d)),hb=2*F/den;$('#dent').setAttribute('rx',Math.max(3,d*6));$('#indenter').setAttribute('r',Math.max(15,43-d*2));$('#status').textContent='● ENSAYO COMPLETADO';showMetrics([['DUREZA BRINELL',fmt(hb,1),'HBW'],['HUELLA (d)',fmt(d,2),'mm'],['CARGA',fmt(F,0),'kgf']]);drawChart('Diámetro de huella (mm)','Dureza Brinell (HBW)',[{label:'Relación carga–huella (D constante)',data:Array.from({length:18},(_,i)=>{let x=D*(.15+i*.045),v=2*F/(Math.PI*D*(D-Math.sqrt(D*D-x*x)));return{x,y:v}}),parsing:false,borderColor:'#1d6686',pointRadius:0,borderWidth:2}]);$('#result-content').insertAdjacentHTML('beforeend',`<div class="explanation">Se ha calculado HBW = 2F / [πD(D − √(D² − d²))]. La dureza aumenta cuando disminuye el tamaño de la huella para las mismas condiciones. El resultado es una estimación matemática y debe respetar las combinaciones normalizadas de bola y carga.</div>`)}
