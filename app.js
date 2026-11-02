@@ -36,22 +36,64 @@ function runTraction(){
   const m=materials[$('#material').value], d=+$('#diameter').value, L=+$('#length').value, F=+$('#force').value;
   if(!(d>0&&L>0&&F>=0)){alert('Introduce diámetro y longitud positivos, y una fuerza no negativa.');return}
   const A=Math.PI*d*d/4, stress=F*1000/A, strain=stress/m.E, eps=strain*100;
-  const yieldStress=m.fy, fracture=stress>=m.fu, yield=stress>=yieldStress;
-  const ext=strain*L;
-  $('#status').textContent=fracture?'● ROTURA':yield?'● DEFORMACIÓN PLÁSTICA':'● ZONA ELÁSTICA';
-  const specimen=$('#specimen');
-  specimen.classList.toggle('fracture',fracture);
-  specimen.setAttribute('d',fracture?'M300 125H320V147L316 153 324 160 312 172H300Z':yield?'M300 125H320V145L323 172H297L300 145Z':'M300 125H320V172H300Z');
+  const fracture=stress>=m.fu, yield=stress>=m.fy, ext=strain*L;
+  const specimen=$('#specimen'), status=$('#status'), run=$('#run');
+  run.disabled=true;run.textContent='ENSAYO EN CURSO…';
+  specimen.classList.remove('fracture');
+  specimen.setAttribute('transform','');
   const curve=stressCurve(m);
   const data=curve.filter(p=>p.x<=eps);
   if(!data.length||data[data.length-1].x<eps)data.push({x:eps,y:stress});
   showMetrics([['TENSIÓN APLICADA',fmt(stress,1),'MPa'],['ALARGAMIENTO ESTIMADO',fmt(ext,2),'mm'],['SECCIÓN INICIAL',fmt(A,2),'mm²']]);
   drawChart('Deformación (%)','Esfuerzo (MPa)',[
     {label:'Curva esfuerzo-deformación estimada',data:curve,parsing:false,borderColor:'#dce3e7',borderWidth:2,pointRadius:0},
-    {label:'Trayectoria hasta la carga aplicada',data,parsing:false,borderColor:'#1d6686',backgroundColor:'#1d6686',borderWidth:3,pointRadius:0},
-    {label:'Estado actual',data:[{x:eps,y:stress}],showLine:false,pointRadius:6,pointBackgroundColor:'#f28c28'}
+    {label:'Trayectoria hasta la carga aplicada',data:[{x:0,y:0}],parsing:false,borderColor:'#1d6686',backgroundColor:'#1d6686',borderWidth:3,pointRadius:0},
+    {label:'Estado actual',data:[{x:0,y:0}],showLine:false,pointRadius:6,pointBackgroundColor:'#f28c28'}
   ]);
-  $('#result-content').insertAdjacentHTML('beforeend',`<div class="explanation">${fracture?'La tensión aplicada supera la resistencia máxima estimada: el modelo considera que la probeta se rompe.':yield?'Se supera el límite elástico estimado. La probeta entra en deformación plástica y puede conservar un alargamiento al retirar la carga.':'La tensión está por debajo del límite elástico estimado. En este modelo, la deformación es principalmente elástica y la probeta recuperaría su longitud al descargarla.'} ${m.duct<2?'La fundición gris se representa como un material de comportamiento frágil.':'La curva representa una zona plástica simplificada antes de la rotura.'} La curva es esquemática y no corresponde a un ensayo experimental certificado.</div>`);
+  const chartData=chart.data.datasets;
+  $('#result-content').insertAdjacentHTML('beforeend',`<div class="calculation">
+    <h4>DESARROLLO DE LOS CÁLCULOS</h4>
+    <div class="calc-row"><span>1. Sección inicial</span><code>A = π · d² / 4 = π · ${fmt(d,2)}² / 4</code><strong>${fmt(A,2)} mm²</strong></div>
+    <div class="calc-row"><span>2. Tensión aplicada</span><code>σ = F / A = (${fmt(F,2)} · 1000) / ${fmt(A,2)}</code><strong>${fmt(stress,2)} MPa</strong></div>
+    <div class="calc-row"><span>3. Deformación unitaria estimada</span><code>ε = σ / E = ${fmt(stress,2)} / ${fmt(m.E,0)}</code><strong>${fmt(strain,5)} (${fmt(eps,3)} %)</strong></div>
+    <div class="calc-row"><span>4. Alargamiento estimado</span><code>ΔL = ε · L₀ = ${fmt(strain,5)} · ${fmt(L,2)}</code><strong>${fmt(ext,3)} mm</strong></div>
+    <p class="calc-note">La expresión ε = σ/E es válida en la zona elástica. Si se supera el límite elástico, el alargamiento real requiere una curva constitutiva completa; aquí se muestra una estimación simplificada.</p>
+  </div><div class="explanation" id="traction-explanation">La máquina está preparada para iniciar la aplicación gradual de la carga.</div>`);
+  const explanation=$('#traction-explanation');
+  const duration=8500, started=performance.now();
+  function frame(now){
+    const t=Math.min(1,(now-started)/duration);
+    const eased=t*t*(3-2*t);
+    const currentStress=stress*eased, currentEps=eps*eased;
+    const neck=yield?Math.min(1,Math.max(0,(currentStress-m.fy)/Math.max(1,m.fu-m.fy))):0;
+    const width=10-3.5*neck;
+    const bottom=172+Math.min(22,ext*2.5*eased);
+    const mid=(125+bottom)/2;
+    const topWidth=10, waistWidth=fracture&&t>.97?3:width;
+    specimen.setAttribute('d',`M${310-topWidth} 125 L${310-topWidth} ${mid-13} L${310-waistWidth} ${mid} L${310-waistWidth} ${bottom-4} L${310+waistWidth} ${bottom-4} L${310+waistWidth} ${mid} L${310+topWidth} ${mid-13} L${310+topWidth} 125 Z`);
+    const progressData=curve.filter(p=>p.x<=currentEps);
+    if(!progressData.length||progressData[progressData.length-1].x<currentEps)progressData.push({x:currentEps,y:currentStress});
+    chartData[1].data=progressData;
+    chartData[2].data=[{x:currentEps,y:currentStress}];
+    chart.update('none');
+    status.textContent=t<1?'● APLICANDO CARGA · '+Math.round(t*100)+' %':fracture?'● ROTURA':'● ENSAYO COMPLETADO';
+    explanation.textContent=t<1
+      ? 'Aplicación gradual de la carga: '+fmt(F*eased,1)+' kN. Tensión instantánea estimada: '+fmt(currentStress,1)+' MPa. Observa cómo se alarga y se estrecha la zona central de la probeta.'
+      : fracture
+        ? 'ROTURA: la tensión aplicada supera la resistencia máxima estimada del material. La probeta se separa en la zona estrechada. La animación es esquemática.'
+        : yield
+          ? 'DEFORMACIÓN PLÁSTICA: se ha superado el límite elástico estimado. La zona central se estrecha; en un ensayo real puede quedar deformación permanente al retirar la carga.'
+          : 'ZONA ELÁSTICA: la tensión queda por debajo del límite elástico estimado. En esta aproximación, la probeta recuperaría su longitud al descargarla.';
+    if(t<1){requestAnimationFrame(frame);return}
+    if(fracture){
+      specimen.classList.add('fracture');
+      specimen.setAttribute('d','M300 125H320L317 148 312 154 319 161 311 173 300 174Z');
+      specimen.insertAdjacentHTML('afterend','<path d="M300 178H309L316 185 320 192" fill="none" stroke="#f28c28" stroke-width="2" stroke-dasharray="3 3"/>');
+    }
+    run.disabled=false;run.textContent='▶ REPETIR ENSAYO';
+  }
+  status.textContent='● INICIANDO ENSAYO';
+  requestAnimationFrame(frame);
 }
 function initBrinell(){shell('Ensayo de dureza Brinell','Una bola presiona la superficie. La huella permite estimar la resistencia a la penetración.','UNE-EN ISO 6506',materialField()+field('Diámetro de bola (D)','ball',10,'mm','0.5',1,10)+field('Carga aplicada (F)','load',3000,'kgf','100',100,30000)+field('Diámetro de huella (d)','dentdiam',4,'mm','0.1',0.1,9.9),specimenSVG('brinell'),'La bola penetra en la superficie durante un tiempo de aplicación de carga. Cuanto menor sea la huella para unas mismas condiciones, mayor será la dureza.');
 $('#material').value='steel';$('#run').onclick=runBrinell;$('#reset').onclick=initBrinell}
