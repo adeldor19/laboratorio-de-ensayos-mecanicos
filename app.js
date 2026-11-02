@@ -70,7 +70,7 @@ function runTraction(){
     <div class="calc-row"><span>3. Deformación elástica (hasta el límite elástico)</span><code>εₑ = σ / E; E = ${fmt(m.E,0)} MPa</code><strong>${fmt(Math.min(stress,m.fy)/m.E,5)}</strong></div>
     <div class="calc-row"><span>4. Tensión de rotura estimada</span><code>σᵣ = fu del material seleccionado</code><strong>${fmt(m.fu,1)} MPa</strong></div>
     <div class="calc-row"><span>5. Fuerza estimada para alcanzar esa tensión</span><code>Fᵣ = σᵣ · A₀ = ${fmt(m.fu,1)} · ${fmt(A,2)}</code><strong>${fmt(breakForce,2)} kN</strong></div>
-    <div class="calc-row"><span>6. Alargamiento estimado en el límite de rotura</span><code>ΔL ≈ εᵣ · L₀; εᵣ ≈ ${fmt(breakStrain*100,2)} %</code><strong>${fmt(breakStrain*L,3)} mm</strong></div>
+    <div class="calc-row"><span>6. Alargamiento estimado para la fuerza aplicada</span><code>ΔL = ε · L₀; ε ≈ ${fmt(finalStrain,5)} (modelo didáctico)</code><strong>${fmt(ext,3)} mm</strong></div>
     <p class="calc-note">El módulo de Young calcula la deformación en la zona elástica. Tras el límite elástico se usa una aproximación lineal didáctica hasta la tensión máxima; la tensión de rotura mostrada es un valor nominal del material, no una predicción exacta de una probeta real.</p>
   </div><div class="explanation" id="traction-explanation">La máquina está preparada para iniciar la aplicación gradual de la carga.</div>`);
   const explanation=$('#traction-explanation');
