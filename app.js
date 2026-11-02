@@ -67,11 +67,11 @@ function runTraction(){
     <h4>DESARROLLO DE LOS CÁLCULOS</h4>
     <div class="calc-row"><span>1. Sección inicial</span><code>A₀ = π · d² / 4 = π · ${fmt(d,2)}² / 4</code><strong>${fmt(A,2)} mm²</strong></div>
     <div class="calc-row"><span>2. Tensión aplicada</span><code>σ = F / A₀ = (${fmt(F,2)} · 1000) / ${fmt(A,2)}</code><strong>${fmt(stress,2)} MPa</strong></div>
-    <div class="calc-row"><span>3. Deformación elástica (hasta el límite elástico)</span><code>εₑ = σ / E; E = ${fmt(m.E,0)} MPa</code><strong>${fmt(Math.min(stress,m.fy)/m.E,5)}</strong></div>
+    <div class="calc-row"><span>3. Deformación elástica en el límite elástico</span><code>εₑ = fy / E = ${fmt(m.fy,1)} / ${fmt(m.E,0)}</code><strong>${fmt(yieldStrain,5)} (adimensional)</strong></div>
     <div class="calc-row"><span>4. Tensión de rotura estimada</span><code>σᵣ = fu del material seleccionado</code><strong>${fmt(m.fu,1)} MPa</strong></div>
     <div class="calc-row"><span>5. Fuerza estimada para alcanzar esa tensión</span><code>Fᵣ = σᵣ · A₀ = ${fmt(m.fu,1)} · ${fmt(A,2)}</code><strong>${fmt(breakForce,2)} kN</strong></div>
-    <div class="calc-row"><span>6. Alargamiento estimado para la fuerza aplicada</span><code>ΔL = ε · L₀; ε ≈ ${fmt(finalStrain,5)} (modelo didáctico)</code><strong>${fmt(ext,3)} mm</strong></div>
-    <p class="calc-note">El módulo de Young calcula la deformación en la zona elástica. Tras el límite elástico se usa una aproximación lineal didáctica hasta la tensión máxima; la tensión de rotura mostrada es un valor nominal del material, no una predicción exacta de una probeta real.</p>
+    <div class="calc-row"><span>6. Alargamiento estimado para la fuerza aplicada</span><code>ΔL = εtotal · L₀; εtotal ≈ ${fmt(finalStrain,5)} (${fracture ? "en el umbral de rotura" : stress<=m.fy ? "zona elástica" : "modelo plástico"})</code><strong>${fmt(ext,3)} mm</strong></div>
+    <p class="calc-note">El apartado 3 muestra la deformación elástica en el límite elástico (εₑ = fy/E), no la deformación total a la carga aplicada. El apartado 6 calcula el alargamiento con la deformación total estimada: en zona elástica usa σ/E; después del límite elástico interpola con el modelo plástico didáctico hasta la deformación de rotura configurada (ductilidad). Si la fuerza supera la de rotura, el alargamiento corresponde al instante estimado justo antes de fracturarse. No es una predicción exacta de un ensayo real.</p>
   </div><div class="explanation" id="traction-explanation">La máquina está preparada para iniciar la aplicación gradual de la carga.</div>`);
   const explanation=$('#traction-explanation');
   const duration=8500, started=performance.now();
